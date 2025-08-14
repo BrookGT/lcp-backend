@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Status {
+  ONLINE
+  BUSY
+  OFFLINE
+}
+
+model User {
+  id           String        @id @default(cuid())
+  username     String        @unique
+  email        String?       @unique
+  passwordHash String
+  status       Status        @default(OFFLINE)
+  contacts     Contact[]     @relation("owner")
+  // Optional inverse side (not always used directly)
+  contactOf    Contact[]     @relation("contactUser")
+  callHistoryA CallHistory[] @relation("caller")
+  callHistoryB CallHistory[] @relation("callee")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Contact {
+  id         String    @id @default(cuid())
+  ownerId    String
+  contactId  String
+  lastCallAt DateTime?
+
+  owner   User @relation("owner", fields: [ownerId], references: [id])
+  contact User @relation("contactUser", fields: [contactId], references: [id])
+
+  @@unique([ownerId, contactId])
+}
+
+model CallHistory {
+  id        String    @id @default(cuid())
+  callerId  String
+  calleeId  String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  caller User @relation("caller", fields: [callerId], references: [id])
+  callee User @relation("callee", fields: [calleeId], references: [id])
+}
+
+// End of schema
