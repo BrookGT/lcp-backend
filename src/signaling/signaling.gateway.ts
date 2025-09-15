@@ -313,7 +313,7 @@ export class SignalingGateway
           select: { id: true },
         });
         // Upsert both directional contacts maintaining lastCallAt
-        await Promise.all([
+        const [c1, c2] = await Promise.all([
           tx.contact.upsert({
             where: {
               ownerId_contactId: {
@@ -327,6 +327,7 @@ export class SignalingGateway
               contactId: payload.toUserId,
               lastCallAt: startedAt,
             },
+            select: { lastCallAt: true },
           }),
           tx.contact.upsert({
             where: {
@@ -341,10 +342,28 @@ export class SignalingGateway
               contactId: payload.fromUserId,
               lastCallAt: startedAt,
             },
+            select: { lastCallAt: true },
           }),
         ]);
         const key = this.callKey(payload.fromUserId, payload.toUserId);
         this.activeCallHistory.set(key, call.id);
+        // Emit contact:update to both participants so clients can update without polling
+        const callerSockets = this.socketsByUser.get(payload.fromUserId);
+        const calleeSockets = this.socketsByUser.get(payload.toUserId);
+        const callerPayload = {
+          id: payload.toUserId,
+          lastCallAt: c1.lastCallAt,
+        };
+        const calleePayload = {
+          id: payload.fromUserId,
+          lastCallAt: c2.lastCallAt,
+        };
+        callerSockets?.forEach((sid) => {
+          this.server.to(sid).emit('contact:update', callerPayload);
+        });
+        calleeSockets?.forEach((sid) => {
+          this.server.to(sid).emit('contact:update', calleePayload);
+        });
       } catch {
         // swallow persistence errors so they don't break signaling
       }
